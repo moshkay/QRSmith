@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QRForge — Free QR Code Generator &amp; URL Shortener</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="hero">
+    <h1>Free <span class="accent-orange">QR Code Generator</span> &amp;<br /><span class="accent-blue">URL Shortener</span></h1>
+    <p class="hero-sub">
+      Create QR codes for websites, WiFi, business cards, and contacts. Shorten long URLs
+      for simpler codes that scan better in print. No signup, no watermark.
+    </p>
+    <div class="badges">
+      <span class="badge orange">✓ 9 QR Code Types</span>
+      <span class="badge green">✓ PNG &amp; SVG Downloads</span>
+      <span class="badge amber">✓ Step-by-Step Guides</span>
+      <span class="badge blue">✓ Free, No Signup</span>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="card">
+      <div class="card-head">
+        <h2>Create a QR code or short link</h2>
+        <p>Pick a tool, enter your content, download the result</p>
+      </div>
+
+      <div class="tabs" role="tablist">
+        <button class="tab active" id="tab-qr" role="tab" aria-selected="true">
+          <span class="tab-ico" aria-hidden="true">▦</span> QR Code Generator
+        </button>
+        <button class="tab" id="tab-short" role="tab" aria-selected="false">
+          <span class="tab-ico" aria-hidden="true">🔗</span> URL Shortener
+        </button>
+      </div>
+
+      <!-- ================= QR GENERATOR PANEL ================= -->
+      <div id="panel-qr" class="panel">
+        <p class="section-label center">Content Type</p>
+        <div class="type-grid" id="type-grid"></div>
+
+        <div class="two-col">
+          <div class="col">
+            <div id="fields"></div>
+
+            <button class="collapse-toggle" id="customize-toggle" type="button" aria-expanded="false">
+              <span class="chev">▸</span> Customize QR Code
+            </button>
+
+            <div class="customize" id="customize" hidden>
+              <div class="grid-2">
+                <div class="field">
+                  <label for="size">Size: <b id="size-val">300</b> px</label>
+                  <input id="size" type="range" min="128" max="1000" step="8" value="300" />
+                  <div class="range-ticks"><span>128px</span><span>512px</span><span>1000px</span></div>
+                </div>
+                <div class="field">
+                  <label for="ec">Error Correction</label>
+                  <select id="ec">
+                    <option value="L">Low (7%)</option>
+                    <option value="M" selected>Medium (15%)</option>
+                    <option value="Q">Quartile (25%)</option>
+                    <option value="H">High (30%)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="grid-2">
+                <div class="field">
+                  <label>Foreground</label>
+                  <div class="color-row">
+                    <input id="fg" type="color" value="#0F172A" />
+                    <input id="fg-hex" type="text" class="hex" value="#0F172A" />
+                  </div>
+                </div>
+                <div class="field">
+                  <label>Background</label>
+                  <div class="color-row">
+                    <input id="bg" type="color" value="#FFFFFF" />
+                    <input id="bg-hex" type="text" class="hex" value="#FFFFFF" />
+                  </div>
+                </div>
+              </div>
+
+              <div class="grid-2">
+                <div class="field">
+                  <label for="shape">Module shape</label>
+                  <select id="shape">
+                    <option value="square">Square</option>
+                    <option value="circle">Rounded dots</option>
+                  </select>
+                </div>
+                <div class="field checks">
+                  <label class="toggle"><input type="checkbox" id="transparent" /> <span>Transparent background</span></label>
+                  <label class="toggle"><input type="checkbox" id="gradient-on" /> <span>Gradient foreground</span></label>
+                </div>
+              </div>
+
+              <div class="field gradient-panel" id="gradient-panel" hidden>
+                <label>Gradient stops &amp; angle</label>
+                <div class="color-row">
+                  <input id="grad-a" type="color" value="#06B6D4" />
+                  <input id="grad-b" type="color" value="#2563EB" />
+                  <input id="grad-angle" type="number" min="0" max="360" value="45" class="hex" title="Angle" />
+                </div>
+              </div>
+
+              <div class="field">
+                <label>Presets</label>
+                <div class="presets" id="presets"></div>
+              </div>
+
+              <div class="field">
+                <label for="logo">Center logo (PNG/JPEG)</label>
+                <div class="color-row">
+                  <input id="logo" type="file" accept="image/png,image/jpeg" />
+                  <button id="logo-clear" class="ghost" type="button" hidden>Remove</button>
+                </div>
+              </div>
+            </div>
+
+            <label class="toggle shorten-row" id="shorten-row">
+              <input type="checkbox" id="shorten-first" />
+              <span>Shorten the URL first (smaller QR + click tracking)</span>
+            </label>
+          </div>
+
+          <div class="col">
+            <p class="section-label center">Live Preview</p>
+            <div class="preview-box">
+              <div class="preview-frame">
+                <img id="preview" alt="QR preview" />
+                <div class="ph" id="ph">
+                  <span class="ph-ico">▦</span>
+                  <span>Enter content to see preview</span>
+                </div>
+              </div>
+              <p class="status" id="status"></p>
+            </div>
+
+            <div class="format-row">
+              <label class="fmt"><input type="radio" name="fmt" value="png" checked /> PNG</label>
+              <label class="fmt"><input type="radio" name="fmt" value="svg" /> SVG</label>
+            </div>
+          </div>
+        </div>
+
+        <button class="cta" id="generate" type="button" disabled>
+          <span aria-hidden="true">▦</span> Download QR Code
+        </button>
+      </div>
+
+      <!-- ================= URL SHORTENER PANEL ================= -->
+      <div id="panel-short" class="panel" hidden>
+        <div class="field">
+          <label for="long-url">Long URL</label>
+          <input id="long-url" type="url" placeholder="https://example.com/a/very/long/path?with=params" autocomplete="off" />
+          <p class="hint" id="short-hint"></p>
+        </div>
+
+        <button class="cta blue" id="shorten-btn" type="button">🔗 Shorten URL</button>
+
+        <div class="short-result" id="short-result" hidden>
+          <div class="short-line">
+            <input id="short-url" type="text" readonly />
+            <button class="ghost" id="copy-short" type="button">Copy</button>
+          </div>
+          <div class="short-meta">
+            <span id="short-clicks">0 clicks</span>
+            <button class="linkish" id="refresh-clicks" type="button">Refresh</button>
+            <button class="linkish" id="qr-from-short" type="button">Make QR code →</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= GUIDES ================= -->
+    <section class="card guides">
+      <h2>Step-by-Step Guides</h2>
+      <div class="steps">
+        <div class="step"><span class="num">1</span><div><b>Pick a content type</b><p>URL, WiFi, contact, and 6 more. The form adapts to what you need.</p></div></div>
+        <div class="step"><span class="num">2</span><div><b>Enter &amp; customize</b><p>Type your content, then open <i>Customize</i> for colors, gradients, dots, and a center logo.</p></div></div>
+        <div class="step"><span class="num">3</span><div><b>Download</b><p>Grab a crisp <b>PNG</b> for screens or a scalable <b>SVG</b> for print — no watermark.</p></div></div>
+      </div>
+      <div class="guide-detail" id="guide-detail"></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>QRForge · <code>POST /api/v1/qr-codes</code> · <code>POST /api/v1/short-links</code></span>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>

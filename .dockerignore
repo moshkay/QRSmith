@@ -1,0 +1,14 @@
+.git
+.gitignore
+*.md
+Dockerfile
+.dockerignore
+.github/
+scripts/
+docker-compose.yml
+image.tar.gz
+bin/
+dist/
+*.png
+.env
+.env.*

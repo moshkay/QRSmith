@@ -1,0 +1,101 @@
+name: Deploy to EC2
+
+# Build, test, and deploy QRForge to a single EC2 host over SSH.
+# The image is built on the GitHub runner and shipped as a tarball, so the
+# EC2 box only needs Docker + the compose plugin (no registry, no build load).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+# Never run two deploys at once; cancel an in-progress deploy if a newer
+# commit lands on main.
+concurrency:
+  group: deploy-ec2
+  cancel-in-progress: true
+
+env:
+  IMAGE_NAME: qrforge
+  # Remote directory (relative to the SSH user's home) that holds the
+  # compose file and the loaded image.
+  REMOTE_DIR: qrforge
+
+jobs:
+  test:
+    name: Test & build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+          cache-dependency-path: go.sum
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test ./...
+
+  deploy:
+    name: Deploy
+    needs: test
+    runs-on: ubuntu-latest
+    # Only deploy real pushes to main (or manual runs), never forks/PRs.
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            --tag "$IMAGE_NAME:${{ github.sha }}" \
+            --tag "$IMAGE_NAME:latest" \
+            .
+
+      - name: Save image to a compressed tarball
+        run: docker save "$IMAGE_NAME:latest" | gzip > image.tar.gz
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Copy image and compose file to EC2
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" "mkdir -p '$REMOTE_DIR'"
+          scp -i ~/.ssh/deploy_key image.tar.gz docker-compose.yml \
+            "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:$REMOTE_DIR/"
+
+      - name: Load image and restart service
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" bash -se <<'EOF'
+          set -euo pipefail
+          cd "${{ env.REMOTE_DIR }}"
+          docker load -i image.tar.gz
+          docker compose up -d --remove-orphans
+          docker image prune -f
+          rm -f image.tar.gz
+          EOF
+
+      - name: Verify health
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
+            'for i in $(seq 1 10); do
+               if curl -fsS http://127.0.0.1/healthz >/dev/null; then
+                 echo "healthy"; exit 0;
+               fi
+               echo "waiting for service... ($i)"; sleep 3;
+             done
+             echo "service did not become healthy"; exit 1'
+
+      - name: Clean up SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

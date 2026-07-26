@@ -1,0 +1,23 @@
+# Binaries
+/bin/
+/dist/
+qrforge
+*.exe
+
+# Env & secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Generated QR images
+*.png
+!web/static/**/*.png
+
+# Deploy artifacts
+image.tar.gz
+image.tar
+
+# OS / editor
+.DS_Store
+*.swp
