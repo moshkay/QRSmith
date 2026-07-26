@@ -5,6 +5,7 @@ Dockerfile
 .dockerignore
 .github/
 scripts/
+nginx/
 docker-compose.yml
 image.tar.gz
 bin/

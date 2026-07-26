@@ -166,13 +166,17 @@ The image is a multi-stage build, runs as a non-root user, and defines a
 
 `/.github/workflows/deploy.yml` builds, tests, and deploys on every push to
 `master` (and via manual "Run workflow"). It builds the Docker image on the
-GitHub runner, ships it to the EC2 host as a tarball over SSH, then runs
-`docker compose up -d`. No container registry is required.
+GitHub runner, ships it (plus the compose file and nginx config) to the EC2 host
+over SSH, then runs `docker compose up -d`. No container registry is required.
+
+**Topology:** an **nginx** container terminates public traffic on ports 80/443
+and reverse-proxies to the `qrforge` container on the internal Docker network
+(`qrforge:8080`). QRForge itself publishes no host port.
 
 ### One-time setup
 
-1. **Provision the EC2 host** — open inbound TCP **80** in the security group,
-   then install Docker + the compose plugin:
+1. **Provision the EC2 host** — open inbound TCP **80** and **443** in the
+   security group, then install Docker + the compose plugin:
 
    ```bash
    ssh ec2-user@<host> 'bash -s' < scripts/ec2-bootstrap.sh
@@ -195,8 +199,35 @@ GitHub runner, ships it to the EC2 host as a tarball over SSH, then runs
 git push origin master      # triggers build → test → deploy
 ```
 
-After deploy, the app is reachable at `http://<EC2_HOST>/` and the pipeline
-polls `/healthz` to confirm the rollout succeeded.
+After deploy, the app is reachable at `http://<EC2_HOST>/` (through nginx) and
+the pipeline polls `/healthz` to confirm the rollout succeeded.
+
+### Enable HTTPS (Let's Encrypt)
+
+`nginx/qrforge.conf` serves plain HTTP by default and already exposes the ACME
+challenge path. To add TLS for your domain:
+
+1. Point your domain's DNS **A record** at the EC2 public IP and set
+   `server_name` in `nginx/qrforge.conf` to that domain.
+2. Issue a certificate into the shared `certbot_certs` volume (run on the host,
+   in the `~/qrforge` directory) — the nginx webroot serves the challenge:
+
+   ```bash
+   docker run --rm \
+     -v qrforge_certbot_certs:/etc/letsencrypt \
+     -v qrforge_certbot_webroot:/var/www/certbot \
+     certbot/certbot certonly --webroot -w /var/www/certbot \
+     -d qr.example.com --email you@example.com --agree-tos --no-eff-email
+   ```
+
+3. Uncomment the HTTPS `server` block (and the HTTP→HTTPS redirect) in
+   `nginx/qrforge.conf`, set your domain in `server_name` and the cert paths,
+   then reload: `docker compose exec nginx nginx -s reload`.
+4. Renew periodically (e.g. a cron entry) with `certbot renew` using the same
+   volume mounts, followed by an nginx reload.
+
+> Volume names are prefixed by the compose project (the directory name), so they
+> appear as `qrforge_certbot_certs` / `qrforge_certbot_webroot`.
 
 ## Notes on security & privacy
 
