@@ -6,11 +6,11 @@ name: Deploy to EC2
 
 on:
   push:
-    branches: [main]
+    branches: [maste]
   workflow_dispatch: {}
 
 # Never run two deploys at once; cancel an in-progress deploy if a newer
-# commit lands on main.
+# commit lands on master.
 concurrency:
   group: deploy-ec2
   cancel-in-progress: true
@@ -46,7 +46,7 @@ jobs:
     name: Deploy
     needs: test
     runs-on: ubuntu-latest
-    # Only deploy real pushes to main (or manual runs), never forks/PRs.
+    # Only deploy real pushes to master (or manual runs), never forks/PRs.
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
