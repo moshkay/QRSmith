@@ -166,17 +166,19 @@ The image is a multi-stage build, runs as a non-root user, and defines a
 
 `/.github/workflows/deploy.yml` builds, tests, and deploys on every push to
 `master` (and via manual "Run workflow"). It builds the Docker image on the
-GitHub runner, ships it (plus the compose file and nginx config) to the EC2 host
-over SSH, then runs `docker compose up -d`. No container registry is required.
+GitHub runner, ships it (plus the compose file) to the EC2 host over SSH, then
+runs `docker compose up -d`. No container registry is required.
 
-**Topology:** an **nginx** container terminates public traffic on ports 80/443
-and reverse-proxies to the `qrforge` container on the internal Docker network
-(`qrforge:8080`). QRForge itself publishes no host port.
+**Topology:** the existing **host nginx** (already serving your other app on
+ports 80/443) terminates public traffic and reverse-proxies `qr.moshcore.com.ng`
+to the `qrforge` container, which binds to **`127.0.0.1:8090`** only. QRForge is
+never exposed to the public internet directly — all traffic goes through the
+host nginx. This shares one reverse proxy across every site on the box.
 
 ### One-time setup
 
-1. **Provision the EC2 host** — open inbound TCP **80** and **443** in the
-   security group, then install Docker + the compose plugin:
+1. **Provision the EC2 host** — the host nginx already owns ports 80/443, so no
+   new security-group ports are needed. Install Docker + the compose plugin:
 
    ```bash
    ssh ec2-user@<host> 'bash -s' < scripts/ec2-bootstrap.sh
@@ -199,38 +201,39 @@ and reverse-proxies to the `qrforge` container on the internal Docker network
 git push origin master      # triggers build → test → deploy
 ```
 
-After deploy, the app is reachable at `http://<EC2_HOST>/` (through nginx) and
-the pipeline polls `/healthz` to confirm the rollout succeeded.
+The app container listens on `127.0.0.1:8090`; the pipeline polls that port's
+`/healthz` to confirm the rollout succeeded. Public access is served by the host
+nginx vhost (below).
 
-### Enable HTTPS (Let's Encrypt)
+### Wire up the host nginx vhost + HTTPS
 
-The app is configured for the domain **`qr.moshcore.com.ng`** (set in
-`nginx/qrforge.conf`). nginx serves plain HTTP until a certificate exists, so
-deploys never break. Turn on HTTPS with a single command:
+QRForge ships a ready-made host vhost at **`nginx/qr.moshcore.com.ng.conf`**. It
+proxies `qr.moshcore.com.ng` → `127.0.0.1:8090`. Because your host nginx already
+owns 80/443 (for your other app), you add this as one more site — no second
+proxy, no port conflict.
 
-1. Point the DNS **A record** for `qr.moshcore.com.ng` at the EC2 public IP, and
-   open inbound TCP **80 + 443** in the security group.
-2. From the deploy directory on the host (e.g. `~/qrforge`):
-
-   ```bash
-   ./scripts/init-tls.sh you@example.com
-   ```
-
-   This obtains the certificate via the ACME HTTP-01 challenge, writes an HTTPS
-   server block into the persistent `nginx_ssl` volume, and reloads nginx —
-   `https://qr.moshcore.com.ng` is then live.
-
-3. **Auto-renew** — add a cron entry (runs as the deploy user):
+1. Point the DNS **A record** for `qr.moshcore.com.ng` at the EC2 public IP.
+2. Install the vhost on the host nginx (use whatever layout your other site
+   uses — `conf.d` or `sites-available`):
 
    ```bash
-   0 3,15 * * * cd ~/qrforge && ./scripts/renew-tls.sh >> ~/qrforge/renew.log 2>&1
+   sudo cp ~/qrforge-src/nginx/qr.moshcore.com.ng.conf \
+     /etc/nginx/conf.d/qr.moshcore.com.ng.conf
+   sudo nginx -t && sudo systemctl reload nginx
    ```
 
-The HTTPS config lives in the `nginx_ssl` Docker volume, which CI never
-overwrites, so redeploys keep TLS intact. To **force** HTTP→HTTPS, replace the
-`location /` proxy block in `nginx/qrforge.conf`'s port-80 server with
-`return 301 https://$host$request_uri;` (do this only after the cert exists),
-then commit and redeploy.
+   (The compose file doesn't ship this file to the host — copy it from your repo
+   checkout, or paste its contents.)
+
+3. Obtain TLS with the **host certbot** (same tool as your other site). The
+   nginx plugin rewrites the vhost to add the 443 block + HTTP→HTTPS redirect:
+
+   ```bash
+   sudo certbot --nginx -d qr.moshcore.com.ng
+   ```
+
+   `https://qr.moshcore.com.ng` is then live, and certbot's systemd timer
+   renews it automatically alongside your other certificates.
 
 ## Notes on security & privacy
 

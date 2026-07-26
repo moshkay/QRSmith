@@ -68,10 +68,10 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
 
-      - name: Copy image, compose file, and nginx config to EC2
+      - name: Copy image and compose file to EC2
         run: |
           ssh -i ~/.ssh/deploy_key "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" "mkdir -p '$REMOTE_DIR'"
-          scp -r -i ~/.ssh/deploy_key image.tar.gz docker-compose.yml nginx \
+          scp -i ~/.ssh/deploy_key image.tar.gz docker-compose.yml \
             "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:$REMOTE_DIR/"
 
       - name: Load image and restart service
@@ -89,7 +89,7 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
             'for i in $(seq 1 10); do
-               if curl -fsS http://127.0.0.1/healthz >/dev/null; then
+               if curl -fsS http://127.0.0.1:8090/healthz >/dev/null; then
                  echo "healthy"; exit 0;
                fi
                echo "waiting for service... ($i)"; sleep 3;
