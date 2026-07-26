@@ -51,6 +51,9 @@ services:
       - ./nginx/qrforge.conf:/etc/nginx/conf.d/default.conf:ro
       - certbot_certs:/etc/letsencrypt:ro
       - certbot_webroot:/var/www/certbot:ro
+      # Holds the HTTPS server block created by scripts/init-tls.sh. Persisted
+      # across deploys and never overwritten by CI.
+      - nginx_ssl:/etc/nginx/ssl-enabled
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
       interval: 30s
@@ -71,6 +74,16 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # Certbot runs on-demand only (via `scripts/init-tls.sh` / `renew-tls.sh`),
+  # never as part of `docker compose up`, thanks to the "tools" profile.
+  certbot:
+    image: certbot/certbot:latest
+    profiles: ["tools"]
+    volumes:
+      - certbot_certs:/etc/letsencrypt
+      - certbot_webroot:/var/www/certbot
+
 volumes:
   certbot_certs:
   certbot_webroot:
+  nginx_ssl:

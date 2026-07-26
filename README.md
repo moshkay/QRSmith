@@ -204,30 +204,33 @@ the pipeline polls `/healthz` to confirm the rollout succeeded.
 
 ### Enable HTTPS (Let's Encrypt)
 
-`nginx/qrforge.conf` serves plain HTTP by default and already exposes the ACME
-challenge path. To add TLS for your domain:
+The app is configured for the domain **`qr.moshcore.com.ng`** (set in
+`nginx/qrforge.conf`). nginx serves plain HTTP until a certificate exists, so
+deploys never break. Turn on HTTPS with a single command:
 
-1. Point your domain's DNS **A record** at the EC2 public IP and set
-   `server_name` in `nginx/qrforge.conf` to that domain.
-2. Issue a certificate into the shared `certbot_certs` volume (run on the host,
-   in the `~/qrforge` directory) — the nginx webroot serves the challenge:
+1. Point the DNS **A record** for `qr.moshcore.com.ng` at the EC2 public IP, and
+   open inbound TCP **80 + 443** in the security group.
+2. From the deploy directory on the host (e.g. `~/qrforge`):
 
    ```bash
-   docker run --rm \
-     -v qrforge_certbot_certs:/etc/letsencrypt \
-     -v qrforge_certbot_webroot:/var/www/certbot \
-     certbot/certbot certonly --webroot -w /var/www/certbot \
-     -d qr.example.com --email you@example.com --agree-tos --no-eff-email
+   ./scripts/init-tls.sh you@example.com
    ```
 
-3. Uncomment the HTTPS `server` block (and the HTTP→HTTPS redirect) in
-   `nginx/qrforge.conf`, set your domain in `server_name` and the cert paths,
-   then reload: `docker compose exec nginx nginx -s reload`.
-4. Renew periodically (e.g. a cron entry) with `certbot renew` using the same
-   volume mounts, followed by an nginx reload.
+   This obtains the certificate via the ACME HTTP-01 challenge, writes an HTTPS
+   server block into the persistent `nginx_ssl` volume, and reloads nginx —
+   `https://qr.moshcore.com.ng` is then live.
 
-> Volume names are prefixed by the compose project (the directory name), so they
-> appear as `qrforge_certbot_certs` / `qrforge_certbot_webroot`.
+3. **Auto-renew** — add a cron entry (runs as the deploy user):
+
+   ```bash
+   0 3,15 * * * cd ~/qrforge && ./scripts/renew-tls.sh >> ~/qrforge/renew.log 2>&1
+   ```
+
+The HTTPS config lives in the `nginx_ssl` Docker volume, which CI never
+overwrites, so redeploys keep TLS intact. To **force** HTTP→HTTPS, replace the
+`location /` proxy block in `nginx/qrforge.conf`'s port-80 server with
+`return 301 https://$host$request_uri;` (do this only after the cert exists),
+then commit and redeploy.
 
 ## Notes on security & privacy
 
