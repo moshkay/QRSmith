@@ -6,7 +6,7 @@ name: Deploy to EC2
 
 on:
   push:
-    branches: [maste]
+    branches: [master]
   workflow_dispatch: {}
 
 # Never run two deploys at once; cancel an in-progress deploy if a newer

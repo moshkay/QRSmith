@@ -165,7 +165,7 @@ The image is a multi-stage build, runs as a non-root user, and defines a
 ## Deploy to EC2 (CI/CD)
 
 `/.github/workflows/deploy.yml` builds, tests, and deploys on every push to
-`main` (and via manual "Run workflow"). It builds the Docker image on the
+`master` (and via manual "Run workflow"). It builds the Docker image on the
 GitHub runner, ships it to the EC2 host as a tarball over SSH, then runs
 `docker compose up -d`. No container registry is required.
 
@@ -192,7 +192,7 @@ GitHub runner, ships it to the EC2 host as a tarball over SSH, then runs
 ### Deploy
 
 ```bash
-git push origin main        # triggers build → test → deploy
+git push origin master      # triggers build → test → deploy
 ```
 
 After deploy, the app is reachable at `http://<EC2_HOST>/` and the pipeline
