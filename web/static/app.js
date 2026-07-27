@@ -300,10 +300,29 @@ async function ensureShortURL(longUrl) {
     const out = await res.json();
     if (out.status) {
       shortenCache[longUrl] = out.entity.shortUrl;
+      saveLink(out.entity);
       return out.entity.shortUrl;
     }
   } catch (_) { /* fall through to raw url */ }
   return "";
+}
+
+// Persist created short links to this browser so the My Links page can list them.
+function saveLink(entity) {
+  try {
+    const KEY = "qrunex_links";
+    const list = JSON.parse(localStorage.getItem(KEY) || "[]");
+    if (!list.some((l) => l.code === entity.code)) {
+      list.push({
+        code: entity.code,
+        url: entity.url,
+        shortUrl: entity.shortUrl,
+        clicks: entity.clicks || 0,
+        createdAt: entity.createdAt,
+      });
+      localStorage.setItem(KEY, JSON.stringify(list));
+    }
+  } catch (_) { /* localStorage unavailable */ }
 }
 
 // ---------------------------------------------------------------------------
@@ -423,6 +442,7 @@ async function shortenURL() {
     const out = await res.json();
     if (!out.status) { hint.textContent = out.error ? out.error.message : "Failed."; hint.className = "hint error"; return; }
     lastShort = out.entity;
+    saveLink(out.entity);
     $("short-url").value = out.entity.shortUrl;
     $("short-clicks").textContent = out.entity.clicks + " clicks";
     $("short-result").hidden = false;
@@ -473,10 +493,18 @@ function renderGuide() {
 // ---------------------------------------------------------------------------
 
 function wire() {
+  // Deep-link support: /?type=wifi selects a content type on load.
+  const params = new URLSearchParams(location.search);
+  const typeParam = params.get("type");
+  if (typeParam) {
+    const found = TYPES.find((t) => t.id === typeParam);
+    if (found) currentType = found;
+  }
+
   renderTypeGrid();
   renderFields();
   renderGuide();
-  $("shorten-row").style.display = "flex";
+  $("shorten-row").style.display = currentType.id === "url" ? "flex" : "none";
 
   bindColorPair($("fg"), $("fg-hex"));
   bindColorPair($("bg"), $("bg-hex"));
@@ -513,6 +541,16 @@ function wire() {
   $("qr-from-short").addEventListener("click", qrFromShort);
 
   loadPresets();
+
+  // Deep links: /?tab=short opens the shortener; /?prefill=<url> preloads a URL QR.
+  if (params.get("tab") === "short") switchTab("short");
+  const prefill = params.get("prefill");
+  if (prefill) {
+    switchTab("qr");
+    const input = $("fields").querySelector('[data-name="url"]');
+    if (input) input.value = prefill;
+  }
+
   render();
 }
 
