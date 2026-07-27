@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Links — Qrunex</title>
+  <link rel="icon" type="image/png" href="/logo.png" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div id="site-nav"></div>
+
+  <main class="wrap wide">
+    <div class="page-head">
+      <div class="page-head-ico">🔗</div>
+      <div>
+        <h1>My Links</h1>
+        <p class="muted">Manage and track all your shortened links</p>
+      </div>
+    </div>
+
+    <div class="ml-toolbar">
+      <input id="ml-search" type="search" placeholder="Search links…" autocomplete="off" />
+      <div class="ml-actions">
+        <select id="ml-sort">
+          <option value="new">Newest First</option>
+          <option value="old">Oldest First</option>
+          <option value="clicks">Most Clicks</option>
+        </select>
+        <button class="ghost" id="ml-refresh" type="button">↻ Refresh</button>
+        <a class="cta compact" href="/?tab=short">+ Create New</a>
+      </div>
+    </div>
+
+    <div class="ml-list" id="ml-list"></div>
+
+    <div class="ml-stats" id="ml-stats"></div>
+  </main>
+
+  <div id="site-footer"></div>
+
+  <script src="/site.js"></script>
+  <script src="/my-links.js"></script>
+</body>
+</html>
