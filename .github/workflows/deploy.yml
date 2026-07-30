@@ -61,6 +61,18 @@ jobs:
       - name: Save image to a compressed tarball
         run: docker save "$IMAGE_NAME:latest" | gzip > image.tar.gz
 
+      - name: Build server .env from secrets
+        env:
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          MONGO_DB: ${{ secrets.MONGO_DB }}
+        run: |
+          # Secrets are read from the environment (not interpolated into the
+          # script text) so special characters are preserved and never logged.
+          {
+            printf 'MONGO_URI=%s\n' "$MONGO_URI"
+            printf 'MONGO_DB=%s\n' "${MONGO_DB:-Moshcoredb}"
+          } > deploy.env
+
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
@@ -68,11 +80,14 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
 
-      - name: Copy image and compose file to EC2
+      - name: Copy image, compose file, and .env to EC2
         run: |
           ssh -i ~/.ssh/deploy_key "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" "mkdir -p '$REMOTE_DIR'"
           scp -i ~/.ssh/deploy_key image.tar.gz docker-compose.yml \
             "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:$REMOTE_DIR/"
+          # Ship the generated .env as the compose env file (git-ignored; never committed).
+          scp -i ~/.ssh/deploy_key deploy.env \
+            "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:$REMOTE_DIR/.env"
 
       - name: Load image and restart service
         run: |
@@ -96,6 +111,6 @@ jobs:
              done
              echo "service did not become healthy"; exit 1'
 
-      - name: Clean up SSH key
+      - name: Clean up secrets on runner
         if: always()
-        run: rm -f ~/.ssh/deploy_key
+        run: rm -f ~/.ssh/deploy_key deploy.env
