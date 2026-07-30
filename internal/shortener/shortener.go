@@ -1,5 +1,6 @@
-// Package shortener provides an in-memory URL shortening service with click
-// tracking. Links are not persisted across restarts.
+// Package shortener provides URL shortening with click tracking. Two backends
+// implement the Store interface: an in-memory store (default, non-persistent)
+// and a MongoDB store (persistent across restarts).
 package shortener
 
 import (
@@ -24,33 +25,40 @@ func (e *Error) Error() string { return e.Message }
 
 // Link is a shortened URL record.
 type Link struct {
-	Code      string    `json:"code"`
-	URL       string    `json:"url"`
-	Clicks    int64     `json:"clicks"`
-	CreatedAt time.Time `json:"createdAt"`
+	Code      string    `json:"code" bson:"code"`
+	URL       string    `json:"url" bson:"url"`
+	Clicks    int64     `json:"clicks" bson:"clicks"`
+	CreatedAt time.Time `json:"createdAt" bson:"createdAt"`
 }
 
-// Store is a concurrency-safe in-memory link store.
-type Store struct {
+// Store abstracts a link backend so the server can use either the in-memory or
+// the MongoDB implementation interchangeably.
+type Store interface {
+	// Create validates rawURL and stores it under a freshly generated code.
+	Create(rawURL string) (*Link, error)
+	// Resolve returns the link for a code and increments its click count.
+	Resolve(code string) (*Link, bool)
+	// Stats returns the link for a code without incrementing clicks.
+	Stats(code string) (*Link, bool)
+}
+
+// MemoryStore is a concurrency-safe in-memory link store. Links are lost on
+// restart; use MongoStore for persistence.
+type MemoryStore struct {
 	mu    sync.RWMutex
 	links map[string]*Link
 }
 
-// NewStore creates an empty link store.
-func NewStore() *Store {
-	return &Store{links: make(map[string]*Link)}
+// NewMemoryStore creates an empty in-memory link store.
+func NewMemoryStore() *MemoryStore {
+	return &MemoryStore{links: make(map[string]*Link)}
 }
 
 // Create validates rawURL and stores it under a freshly generated unique code.
-func (s *Store) Create(rawURL string) (*Link, error) {
-	rawURL = strings.TrimSpace(rawURL)
-	if rawURL == "" {
-		return nil, &Error{Code: "MISSING_URL", Message: "A URL is required"}
-	}
-
-	parsed, err := url.Parse(rawURL)
-	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-		return nil, &Error{Code: "INVALID_URL", Message: "Provide a valid http(s) URL"}
+func (s *MemoryStore) Create(rawURL string) (*Link, error) {
+	normalized, verr := validateURL(rawURL)
+	if verr != nil {
+		return nil, verr
 	}
 
 	code, err := s.uniqueCode()
@@ -58,7 +66,7 @@ func (s *Store) Create(rawURL string) (*Link, error) {
 		return nil, &Error{Code: "INTERNAL_ERROR", Message: "Could not allocate a short code"}
 	}
 
-	link := &Link{Code: code, URL: parsed.String(), CreatedAt: time.Now().UTC()}
+	link := &Link{Code: code, URL: normalized, CreatedAt: time.Now().UTC()}
 
 	s.mu.Lock()
 	s.links[code] = link
@@ -67,7 +75,7 @@ func (s *Store) Create(rawURL string) (*Link, error) {
 }
 
 // Resolve returns the link for a code and atomically increments its click count.
-func (s *Store) Resolve(code string) (*Link, bool) {
+func (s *MemoryStore) Resolve(code string) (*Link, bool) {
 	s.mu.RLock()
 	link, ok := s.links[code]
 	s.mu.RUnlock()
@@ -79,14 +87,14 @@ func (s *Store) Resolve(code string) (*Link, bool) {
 }
 
 // Stats returns the link for a code without incrementing clicks.
-func (s *Store) Stats(code string) (*Link, bool) {
+func (s *MemoryStore) Stats(code string) (*Link, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	link, ok := s.links[code]
 	return link, ok
 }
 
-func (s *Store) uniqueCode() (string, error) {
+func (s *MemoryStore) uniqueCode() (string, error) {
 	for attempts := 0; attempts < 10; attempts++ {
 		code, err := randomCode()
 		if err != nil {
@@ -100,6 +108,19 @@ func (s *Store) uniqueCode() (string, error) {
 		}
 	}
 	return "", &Error{Code: "INTERNAL_ERROR", Message: "code space exhausted"}
+}
+
+// validateURL trims and validates a raw URL, returning the normalized form.
+func validateURL(rawURL string) (string, *Error) {
+	rawURL = strings.TrimSpace(rawURL)
+	if rawURL == "" {
+		return "", &Error{Code: "MISSING_URL", Message: "A URL is required"}
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return "", &Error{Code: "INVALID_URL", Message: "Provide a valid http(s) URL"}
+	}
+	return parsed.String(), nil
 }
 
 func randomCode() (string, error) {

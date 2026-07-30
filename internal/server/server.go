@@ -18,18 +18,18 @@ import (
 type Server struct {
 	qr              *qr.Generator
 	beautify        *beautify.Service
-	shortener       *shortener.Store
+	shortener       shortener.Store
 	maxContentBytes int
 	maxBodyBytes    int64
 	handler         http.Handler
 }
 
-// New builds a fully configured Server from application config.
-func New(cfg config.Config) (*Server, error) {
+// New builds a fully configured Server from application config and a link store.
+func New(cfg config.Config, store shortener.Store) (*Server, error) {
 	s := &Server{
 		qr:              qr.NewGenerator(),
 		beautify:        beautify.NewService(int(cfg.MaxLogoBytes)),
-		shortener:       shortener.NewStore(),
+		shortener:       store,
 		maxContentBytes: cfg.MaxContentBytes,
 		// Allow room for a base64-encoded logo (~4/3 expansion) plus JSON overhead.
 		maxBodyBytes: cfg.MaxLogoBytes*2 + 64*1024,

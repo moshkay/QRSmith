@@ -1,7 +1,8 @@
 # Runtime compose file deployed to the EC2 host. The CI pipeline loads the
 # "qrforge:latest" image from a tarball, then runs `docker compose up -d`.
 #
-# Topology: host nginx (public 80/443, terminates TLS) --> qrforge (127.0.0.1:8090).
+# Topology: host nginx (public 80/443, terminates TLS) --> qrforge (127.0.0.1:8090)
+#           qrforge --> mongo (internal compose network, not published).
 # The app container binds to localhost ONLY, so it is never reachable from the
 # public internet directly -- all traffic must go through the host reverse proxy.
 services:
@@ -9,6 +10,9 @@ services:
     image: qrforge:latest
     container_name: qrforge
     restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
     # Bind to loopback only. The host nginx proxies qr.moshcore.com.ng here.
     ports:
       - "127.0.0.1:8090:8080"
@@ -18,6 +22,11 @@ services:
       WRITE_TIMEOUT: "30s"
       MAX_CONTENT_BYTES: "2048"
       MAX_LOGO_BYTES: "2097152"
+      # Persistent link storage. Override MONGO_URI (e.g. a MongoDB Atlas SRV
+      # string with credentials) via the host environment or an .env file.
+      MONGO_URI: "${MONGO_URI:-mongodb://mongo:27017}"
+      MONGO_DB: "${MONGO_DB:-qrunex}"
+      MONGO_TIMEOUT: "5s"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
       interval: 30s
@@ -37,3 +46,35 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+  mongo:
+    image: mongo:7
+    container_name: qrforge_mongo
+    restart: unless-stopped
+    # Not published to the host: only qrforge (same network) reaches it.
+    expose:
+      - "27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+    deploy:
+      resources:
+        reservations:
+          cpus: "0.10"
+          memory: 128M
+        limits:
+          cpus: "0.75"
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  mongo_data:

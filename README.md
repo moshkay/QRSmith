@@ -33,7 +33,7 @@ The app is split into focused, independently testable services:
 | `internal/qr`        | Core rendering engine: matrix → styled PNG **and SVG** (colors, gradient). |
 | `internal/beautify`  | Styling service: presets, validation, contrast checks, logo decode.        |
 | `internal/qrcontent` | Builds the encoded payload for each of the 9 content types.                |
-| `internal/shortener` | In-memory URL shortener with click tracking.                               |
+| `internal/shortener` | URL shortener with click tracking (in-memory or MongoDB backend).           |
 | `internal/server`    | HTTP API, handlers, middleware (rate limit, logging, security).            |
 | `internal/config`    | Environment-based configuration.                                           |
 | `web/`               | Embedded single-page frontend (served via `go:embed`).                     |
@@ -58,6 +58,30 @@ All settings come from environment variables (with sane defaults):
 | `SHUTDOWN_TIMEOUT`  | `10s`   | Graceful shutdown timeout            |
 | `MAX_CONTENT_BYTES` | `2048`  | Max QR content length                |
 | `MAX_LOGO_BYTES`    | `2097152` | Max decoded logo size (2 MiB)      |
+| `MONGO_URI`         | *(empty)* | MongoDB connection string. **When empty, links are stored in memory** and lost on restart. Set it to persist links + click counts. |
+| `MONGO_DB`          | `qrunex`  | MongoDB database name              |
+| `MONGO_TIMEOUT`     | `5s`      | Per-operation timeout for MongoDB calls |
+
+### Link storage (MongoDB)
+
+The URL shortener uses a pluggable store:
+
+- **No `MONGO_URI`** → in-memory store. Great for local dev; links vanish on restart.
+- **`MONGO_URI` set** → MongoDB store. Links and click counts persist across
+  restarts, stored in the `short_links` collection with a unique index on `code`.
+
+Run locally against a throwaway Mongo:
+
+```bash
+docker run -d --name qrunex-mongo -p 27017:27017 mongo:7
+MONGO_URI="mongodb://localhost:27017" go run ./cmd/server
+```
+
+In production, `docker-compose.yml` starts a `mongo:7` service (internal to the
+compose network, data on the `mongo_data` volume) and points the app at it. To
+use **MongoDB Atlas** instead, set `MONGO_URI` (an SRV string with credentials)
+via the host environment or an `.env` file next to the compose file — never
+commit it — and you can drop the bundled `mongo` service.
 
 ## API
 
